@@ -1,0 +1,6 @@
+resources:
+  - ../../base
+
+images:
+  - name: docker.io/YOUR_DOCKERHUB/auth-service
+    newTag: "initial"

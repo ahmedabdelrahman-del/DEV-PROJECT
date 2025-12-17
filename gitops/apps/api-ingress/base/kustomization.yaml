@@ -1,0 +1,3 @@
+resources:
+  - user-ingress.yaml
+  - auth-ingress.yaml

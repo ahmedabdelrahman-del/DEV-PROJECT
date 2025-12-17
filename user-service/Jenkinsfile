@@ -1,0 +1,54 @@
+pipeline {
+  agent any
+
+  environment {
+    DOCKERHUB_USER = "YOUR_DOCKERHUB"
+    SERVICE_NAME   = "user-service"
+    IMAGE          = "docker.io/${DOCKERHUB_USER}/${SERVICE_NAME}"
+    TAG            = "${env.GIT_COMMIT}".take(7)
+
+    GITOPS_REPO_SSH = "git@github.com:YOUR_GH_USER/gitops.git"
+    GITOPS_BRANCH   = "main"
+    GITOPS_PATH     = "apps/${SERVICE_NAME}/overlays/dev/kustomization.yaml"
+
+    DOCKERHUB_CRED  = "dockerhub-creds"
+    GITOPS_SSH_CRED = "gitops-repo-ssh"
+  }
+
+  stages {
+    stage("Test") { steps { sh "go test ./..." } }
+
+    stage("Build") { steps { sh "docker build -t ${IMAGE}:${TAG} -t ${IMAGE}:latest ." } }
+
+    stage("Push to Docker Hub") {
+      steps {
+        withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CRED,
+          usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+          sh """
+            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+            docker push ${IMAGE}:${TAG}
+            docker push ${IMAGE}:latest
+          """
+        }
+      }
+    }
+
+    stage("GitOps: bump tag") {
+      steps {
+        sshagent([env.GITOPS_SSH_CRED]) {
+          sh """
+            rm -rf gitops
+            git clone -b ${GITOPS_BRANCH} ${GITOPS_REPO_SSH} gitops
+            cd gitops
+            sed -i.bak 's/newTag: .*/newTag: "${TAG}"/' ${GITOPS_PATH}
+            git config user.email "jenkins@local"
+            git config user.name  "jenkins"
+            git add ${GITOPS_PATH}
+            git commit -m "${SERVICE_NAME}: bump image tag to ${TAG}" || true
+            git push origin ${GITOPS_BRANCH}
+          """
+        }
+      }
+    }
+  }
+}
