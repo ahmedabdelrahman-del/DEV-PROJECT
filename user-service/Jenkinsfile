@@ -7,7 +7,7 @@ pipeline {
     IMAGE          = "docker.io/${DOCKERHUB_USER}/${SERVICE_NAME}"
     TAG            = "${env.GIT_COMMIT}".take(7)
 
-    // GitOps repo is the DEV-PROJECT monorepo
+    // GitOps uses the DEV-PROJECT monorepo
     GITOPS_REPO_SSH = "git@github.com:ahmedabdelrahman-del/DEV-PROJECT.git"
     GITOPS_BRANCH   = "main"
     // Path to kustomization.yaml inside that repo
@@ -19,18 +19,18 @@ pipeline {
 
   stages {
 
-stage("Test") {
-  steps {
-    sh """
-      docker run --rm \
-        -v \$PWD:/workspace \
-        -w /workspace/user-service \
-        golang:1.23 \
-        go test ./...
-    """
-  }
-}
-
+    stage("Test") {
+      steps {
+        // Run tests inside a golang container via docker run
+        sh '''
+          docker run --rm \
+            -v $PWD:/workspace \
+            -w /workspace/user-service \
+            golang:1.23 \
+            go test ./...
+        '''
+      }
+    }
 
     stage("Build") {
       steps {
