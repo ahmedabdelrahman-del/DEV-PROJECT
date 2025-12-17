@@ -19,19 +19,18 @@ pipeline {
 
   stages {
 
-    stage("Test") {
-      // Run tests inside a golang container, not on the Jenkins image
-      agent {
-        docker {
-          image 'golang:1.23'
-          // Mount the workspace and set working dir to the user-service folder
-          args '-v $PWD:/workspace -w /workspace/user-service'
-        }
-      }
-      steps {
-        sh 'go test ./...'
-      }
-    }
+stage("Test") {
+  steps {
+    sh """
+      docker run --rm \
+        -v \$PWD:/workspace \
+        -w /workspace/user-service \
+        golang:1.23 \
+        go test ./...
+    """
+  }
+}
+
 
     stage("Build") {
       steps {
