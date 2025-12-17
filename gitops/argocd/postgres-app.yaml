@@ -12,7 +12,7 @@ spec:
       helm:
         valueFiles:
           - $values/infra/postgres/values-dev.yaml
-    - repoURL: git@github.com:YOUR_GH_USER/gitops.git
+    - repoURL: git@github.com:ahmedabdelrahman-del/gitops.git
       targetRevision: main
       ref: values
   destination:

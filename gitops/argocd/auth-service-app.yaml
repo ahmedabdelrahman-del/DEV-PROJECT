@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: git@github.com:YOUR_GH_USER/gitops.git
+    repoURL: git@github.com:ahmedabdelrahman-del/gitops.git
     targetRevision: main
     path: apps/auth-service/overlays/dev
   destination:

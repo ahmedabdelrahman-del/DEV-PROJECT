@@ -2,12 +2,12 @@ pipeline {
   agent any
 
   environment {
-    DOCKERHUB_USER = "YOUR_DOCKERHUB"
+    DOCKERHUB_USER = "ahmed3sjsu"
     SERVICE_NAME   = "user-service"
     IMAGE          = "docker.io/${DOCKERHUB_USER}/${SERVICE_NAME}"
     TAG            = "${env.GIT_COMMIT}".take(7)
 
-    GITOPS_REPO_SSH = "git@github.com:YOUR_GH_USER/gitops.git"
+    GITOPS_REPO_SSH = "git@github.com:ahmedabdelrahman-del/gitops.git"
     GITOPS_BRANCH   = "main"
     GITOPS_PATH     = "apps/${SERVICE_NAME}/overlays/dev/kustomization.yaml"
 
