@@ -21,16 +21,12 @@ pipeline {
 
     stage("Test") {
       steps {
-        // Run tests inside a golang container via docker run
-        sh '''
-          docker run --rm \
-            -v $PWD:/workspace \
-            -w /workspace/auth-service \
-            golang:1.23 \
-            go test ./...
-        '''
+        dir('auth-service') {
+          sh 'go test ./...'
+        }
       }
     }
+
 
     stage("Build") {
       steps {
