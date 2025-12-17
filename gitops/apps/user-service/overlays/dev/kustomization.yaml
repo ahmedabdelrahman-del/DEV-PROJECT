@@ -3,4 +3,4 @@ resources:
 
 images:
   - name: docker.io/YOUR_DOCKERHUB/user-service
-    newTag: "initial"
+    newTag: "dec968c"
