@@ -68,10 +68,23 @@ for i in {1..60}; do
   u=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/healthz || true)
   a=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/healthz || true)
   if [[ "$u" == "200" && "$a" == "200" ]]; then
+    echo "[e2e] services are healthy"
     break
   fi
   sleep 1
 done
+
+# Verify services are actually healthy
+u=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/healthz || true)
+a=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/healthz || true)
+if [[ "$u" != "200" ]] || [[ "$a" != "200" ]]; then
+  echo "[e2e] ERROR: services failed to start (user: $u, auth: $a)"
+  echo "[e2e] user-service logs:"
+  cat /tmp/user-service.log || true
+  echo "[e2e] auth-service logs:"
+  cat /tmp/auth-service.log || true
+  exit 1
+fi
 
 echo "[e2e] create user"
 CREATE_STATUS=$(curl -s -o /tmp/create.json -w "%{http_code}" -H 'Content-Type: application/json' \
