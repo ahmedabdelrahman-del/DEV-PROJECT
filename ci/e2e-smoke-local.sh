@@ -30,7 +30,7 @@ docker run -d --name e2e-postgres \
   -e POSTGRES_USER=appuser \
   -e POSTGRES_PASSWORD=apppass \
   -e POSTGRES_DB=appdb \
-  -p 5432:5432 \
+  -p 5433:5432 \
   postgres:16-alpine >/dev/null
 
 echo "[e2e] waiting for postgres readiness"
@@ -55,7 +55,7 @@ go build $GOFLAGS -o "$BIN_DIR/auth-service" ./cmd/server
 popd >/dev/null
 
 echo "[e2e] starting user-service on :8081"
-export DATABASE_URL="postgresql://appuser:apppass@localhost:5432/appdb?sslmode=disable"
+export DATABASE_URL="postgresql://appuser:apppass@localhost:5433/appdb?sslmode=disable"
 ADDR=":8081" "$BIN_DIR/user-service" >/tmp/user-service.log 2>&1 & echo $! > "$BIN_DIR/user-service.pid"
 
 echo "[e2e] starting auth-service on :8082"
