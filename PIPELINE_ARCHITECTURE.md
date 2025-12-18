@@ -14,6 +14,7 @@ Your project follows the **GitOps pattern** with Jenkins CI and ArgoCD-ready inf
 2. Build Docker image
 3. Push to Docker Hub
 4. Update GitOps manifests with new image tag
+5. E2E smoke (kind): spin up disposable kind, deploy dev overlays, run create-user + login flow, then delete cluster
 
 **Files:** `auth-service/Jenkinsfile` and `user-service/Jenkinsfile`
 
@@ -31,9 +32,9 @@ Your project follows the **GitOps pattern** with Jenkins CI and ArgoCD-ready inf
 2. Create cluster
 3. Install Ingress controller
 4. Install PostgreSQL database
-5. Run database migrations
-6. Load images into cluster
-7. Deploy manifests
+5. Run database migrations (with readiness + retries)
+6. Load local dev images into kind
+7. Deploy manifests (dev overlays point to local :dev images)
 
 **Files:** `bootstrap.sh`
 
@@ -55,6 +56,7 @@ Jenkins Pipeline triggers
     ├─ Push to Docker Hub
     └─ Update gitops/apps/[service]/overlays/dev/kustomization.yaml
          with new image tag
+    └─ (Optional on branch/main) E2E smoke on disposable kind
     ↓
 ArgoCD watches gitops/ repo (optional)
     ├─ Detects new image tag
