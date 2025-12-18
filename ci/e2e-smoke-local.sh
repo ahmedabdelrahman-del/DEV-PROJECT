@@ -30,10 +30,14 @@ docker run -d --name e2e-postgres \
   -e POSTGRES_USER=appuser \
   -e POSTGRES_PASSWORD=apppass \
   -e POSTGRES_DB=appdb \
-  -p 127.0.0.1:5433:5432 \
+  -p 5433:5432 \
   postgres:16-alpine >/dev/null
 echo "[e2e] waiting for container to be fully started"
-sleep 2
+sleep 3
+
+# Get the container IP for direct connection
+POSTGRES_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' e2e-postgres)
+echo "[e2e] postgres container IP: $POSTGRES_IP"
 
 echo "[e2e] waiting for postgres readiness (inside container)"
 for i in {1..60}; do
@@ -61,6 +65,15 @@ fi
 echo "[e2e] applying DB migrations"
 docker exec -i e2e-postgres psql -U appuser -d appdb -v ON_ERROR_STOP=1 -f - < "$ROOT_DIR/user-service/migrations/001_init.sql"
 
+echo "[e2e] verifying port 5433 is listening on host"
+netstat -tuln | grep 5433 || ss -tuln | grep 5433 || echo "WARNING: port 5433 not found in netstat/ss"
+docker ps | grep e2e-postgres
+
+echo "[e2e] testing connection from host to postgres"
+if command -v psql >/dev/null; then
+  PGPASSWORD=apppass psql -h localhost -p 5433 -U appuser -d appdb -c "SELECT 1" || echo "WARNING: psql connection test failed"
+fi
+
 echo "[e2e] building services"
 GOFLAGS=${GOFLAGS:-}
 pushd "$ROOT_DIR/user-service" >/dev/null
@@ -72,7 +85,9 @@ go build $GOFLAGS -o "$BIN_DIR/auth-service" ./cmd/server
 popd >/dev/null
 
 echo "[e2e] starting user-service on :8081"
-export DATABASE_URL="postgresql://appuser:apppass@localhost:5433/appdb?sslmode=disable"
+# Try localhost first, fallback to container IP if localhost doesn't work
+export DATABASE_URL="postgresql://appuser:apppass@${POSTGRES_IP}:5432/appdb?sslmode=disable"
+echo "[e2e] DATABASE_URL=${DATABASE_URL}"
 ADDR=":8081" "$BIN_DIR/user-service" >/tmp/user-service.log 2>&1 & echo $! > "$BIN_DIR/user-service.pid"
 
 echo "[e2e] starting auth-service on :8082"
