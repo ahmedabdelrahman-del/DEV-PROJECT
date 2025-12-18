@@ -6,4 +6,4 @@ resources:
 
 images:
   - name: docker.io/ahmed3sjsu/user-service
-    newTag: "dec968c"
+    newTag: "1544969"
