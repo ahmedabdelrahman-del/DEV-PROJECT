@@ -30,16 +30,33 @@ docker run -d --name e2e-postgres \
   -e POSTGRES_USER=appuser \
   -e POSTGRES_PASSWORD=apppass \
   -e POSTGRES_DB=appdb \
-  -p 5433:5432 \
+  -p 127.0.0.1:5433:5432 \
   postgres:16-alpine >/dev/null
+echo "[e2e] waiting for container to be fully started"
+sleep 2
 
-echo "[e2e] waiting for postgres readiness"
+echo "[e2e] waiting for postgres readiness (inside container)"
 for i in {1..60}; do
   if docker exec e2e-postgres pg_isready -U appuser -d appdb -h 127.0.0.1 >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
+
+echo "[e2e] verifying postgres accessible from host on port 5433"
+for i in {1..30}; do
+  if docker exec e2e-postgres pg_isready -U appuser -d appdb -h 0.0.0.0 -p 5432 >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+# Final verification that we can connect from the host
+if ! docker exec e2e-postgres pg_isready -U appuser -d appdb -h 0.0.0.0 -p 5432 >/dev/null 2>&1; then
+  echo "[e2e] ERROR: postgres not accepting connections"
+  docker logs e2e-postgres || true
+  exit 1
+fi
 
 echo "[e2e] applying DB migrations"
 docker exec -i e2e-postgres psql -U appuser -d appdb -v ON_ERROR_STOP=1 -f - < "$ROOT_DIR/user-service/migrations/001_init.sql"
