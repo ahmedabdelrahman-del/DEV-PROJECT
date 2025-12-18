@@ -3,9 +3,10 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -59,6 +60,10 @@ func (h Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 	case users.ErrAlreadyExists:
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 	default:
+		// Log the actual error for debugging
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "CreateUser error: %v\n", err)
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server error"})
 	}
 }
