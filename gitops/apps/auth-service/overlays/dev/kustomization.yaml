@@ -8,4 +8,4 @@ images:
   # Use the locally built image loaded into kind by bootstrap.sh
   - name: docker.io/ahmed3sjsu/auth-service
     newName: auth-service
-    newTag: "eab0d0c"
+    newTag: "4eae525"
