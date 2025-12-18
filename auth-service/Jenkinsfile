@@ -1,6 +1,12 @@
 pipeline {
   agent any
 
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    ansiColor('xterm')
+  }
+
   environment {
     DOCKERHUB_USER = "ahmed3sjsu"
     SERVICE_NAME   = "auth-service"
@@ -14,64 +20,89 @@ pipeline {
     GITOPS_PATH     = "gitops/apps/${SERVICE_NAME}/overlays/dev/kustomization.yaml"
 
     DOCKERHUB_CRED  = "dockerhub-creds"
-    GITOPS_SSH_CRED = "gitops-repo-ssh"
   }
 
   stages {
-
-    stage("Test") {
+    stage('Checkout') {
       steps {
-        dir('auth-service') {
+        checkout scm
+      }
+    }
+
+    stage('Go format (check)') {
+      steps {
+        dir("${SERVICE_NAME}") {
+          sh 'test -z "$(gofmt -l .)"'
+        }
+      }
+    }
+
+    stage('Go vet') {
+      steps {
+        dir("${SERVICE_NAME}") {
+          sh 'go vet ./...'
+        }
+      }
+    }
+
+    stage('Unit tests') {
+      steps {
+        dir("${SERVICE_NAME}") {
           sh 'go test ./...'
         }
       }
     }
 
-
-    stage("Build") {
+    stage('Build & Push image') {
       steps {
-        sh """
-          docker build \
-            -t ${IMAGE}:${TAG} \
-            -t ${IMAGE}:latest \
-            -f auth-service/Dockerfile \
-            auth-service
-        """
-      }
-    }
+        withCredentials([usernamePassword(credentialsId: "${DOCKERHUB_CRED}", usernameVariable: "DOCKER_USER", passwordVariable: "DOCKER_PASS")]) {
+          sh '''
+            set -euo pipefail
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-    stage("Push to Docker Hub") {
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: env.DOCKERHUB_CRED,
-          usernameVariable: 'DH_USER',
-          passwordVariable: 'DH_PASS'
-        )]) {
-          sh """
-            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
-            docker push ${IMAGE}:${TAG}
-            docker push ${IMAGE}:latest
-          """
+            export DOCKER_BUILDKIT=1
+            docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" "${SERVICE_NAME}"
+            docker push "${IMAGE}:${TAG}"
+            docker push "${IMAGE}:latest"
+
+            docker logout
+          '''
         }
       }
     }
 
-    stage("GitOps: bump tag") {
+    stage('Update GitOps (dev)') {
       steps {
-        sshagent([env.GITOPS_SSH_CRED]) {
-          sh """
+        sshagent(credentials: ['github-ssh']) {
+          sh '''
+            set -euo pipefail
             rm -rf gitops
-            git clone -b ${GITOPS_BRANCH} ${GITOPS_REPO_SSH} gitops
+            git clone -b "${GITOPS_BRANCH}" "${GITOPS_REPO_SSH}" gitops
             cd gitops
-            sed -i.bak 's/newTag: .*/newTag: "${TAG}"/' ${GITOPS_PATH}
+
+            if command -v yq >/dev/null 2>&1; then
+              # Prefer YAML-aware updates when available.
+              yq -i '.images[].newTag = strenv(TAG)' "${GITOPS_PATH}"
+            else
+              # Fallback (best-effort): replace the first newTag entry.
+              sed -i.bak '0,/newTag:/s/newTag: .*/newTag: "'"${TAG}"'"/' "${GITOPS_PATH}"
+            fi
+
             git config user.email "jenkins@local"
             git config user.name  "jenkins"
-            git add ${GITOPS_PATH}
+
+            git add "${GITOPS_PATH}"
             git commit -m "${SERVICE_NAME}: bump image tag to ${TAG}" || true
-            git push origin ${GITOPS_BRANCH}
-          """
+            git push origin "${GITOPS_BRANCH}"
+          '''
         }
       }
+    }
+  }
+
+  post {
+    always {
+      cleanWs()
     }
   }
 }
