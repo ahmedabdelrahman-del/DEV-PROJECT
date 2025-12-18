@@ -103,21 +103,36 @@ pipeline {
         sh '''
           set -euo pipefail
 
-          # Install prerequisites if missing
+          # Ensure Docker is available (kind requires it)
+          if ! docker info >/dev/null 2>&1; then
+            echo "Docker is not available on this agent."
+            exit 1
+          fi
+
+          # Install prerequisites into a local tools dir (no sudo)
+          TOOLS="$PWD/.tools"
+          mkdir -p "$TOOLS"
+          export PATH="$TOOLS:$PATH"
+
           if ! command -v kind >/dev/null 2>&1; then
-            curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
-            chmod +x ./kind
-            sudo mv ./kind /usr/local/bin/
+            echo "Installing kind locally..."
+            curl -fsSL -o "$TOOLS/kind" https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+            chmod +x "$TOOLS/kind"
           fi
 
           if ! command -v kubectl >/dev/null 2>&1; then
-            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-            chmod +x kubectl
-            sudo mv kubectl /usr/local/bin/
+            echo "Installing kubectl locally..."
+            KVER=$(curl -L -s https://dl.k8s.io/release/stable.txt)
+            curl -fsSL -o "$TOOLS/kubectl" "https://dl.k8s.io/release/${KVER}/bin/linux/amd64/kubectl"
+            chmod +x "$TOOLS/kubectl"
           fi
 
           if ! command -v helm >/dev/null 2>&1; then
-            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+            echo "Installing helm locally..."
+            curl -fsSL https://get.helm.sh/helm-v3.15.4-linux-amd64.tar.gz -o /tmp/helm.tgz
+            tar -xzf /tmp/helm.tgz -C /tmp
+            mv /tmp/linux-amd64/helm "$TOOLS/helm"
+            chmod +x "$TOOLS/helm"
           fi
 
           # Create disposable cluster
@@ -139,12 +154,20 @@ pipeline {
           helm upgrade --install postgres bitnami/postgresql -f gitops/infra/postgres/values-dev.yaml
           kubectl wait --for=condition=ready pod --selector=app.kubernetes.io/name=postgresql --timeout=300s
 
-          for i in {1..60}; do
-            if kubectl exec -it deployment/postgres-postgresql -- pg_isready -U appuser -d appdb &>/dev/null; then
-              break
-            fi
-            sleep 2
-          done
+          # Wait until DB accepts connections using a temporary client pod
+          kubectl run pg-wait --rm -i --restart=Never --image=bitnami/postgresql:latest -- bash -lc '
+            set -e
+            for i in {1..60}; do
+              pg_isready -h postgres-postgresql -p 5432 -U appuser -d appdb && exit 0
+              sleep 2
+            done
+            exit 1
+          '
+
+          # Run DB migrations so user-service has required schema
+          kubectl run psql-migrate --rm -i --restart=Never --image=bitnami/postgresql:latest -- \
+            psql "postgresql://appuser:apppass@postgres-postgresql:5432/appdb?sslmode=disable" \
+            -c "$(cat user-service/migrations/001_init.sql)"
 
           # Build & load local images for smoke
           export DOCKER_BUILDKIT=1
@@ -158,8 +181,8 @@ pipeline {
           kubectl apply -k gitops/apps/auth-service/overlays/dev
           kubectl apply -k gitops/apps/api-ingress/overlays/dev
 
-          kubectl rollout status deployment/user-service --timeout=180s
-          kubectl rollout status deployment/auth-service --timeout=180s
+          kubectl rollout status deployment/user-service --timeout=300s
+          kubectl rollout status deployment/auth-service --timeout=300s
 
           # E2E smoke: create user then login
           create_status=$(curl -s -o /tmp/create.json -w "%{http_code}" --resolve api.local:80:127.0.0.1 -H "Content-Type: application/json" -d '{"username":"ci-user","password":"ci-pass-123"}' http://api.local/api/v1/users)
