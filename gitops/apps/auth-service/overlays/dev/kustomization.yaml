@@ -5,5 +5,7 @@ resources:
   - ../../base
 
 images:
+  # Use the locally built image loaded into kind by bootstrap.sh
   - name: docker.io/ahmed3sjsu/auth-service
-    newTag: "c1056d0"
+    newName: auth-service
+    newTag: dev
