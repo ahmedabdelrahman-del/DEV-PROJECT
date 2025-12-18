@@ -6,4 +6,4 @@ resources:
 
 images:
   - name: docker.io/ahmed3sjsu/auth-service
-    newTag: "0bf6cb3"
+    newTag: "0ad6e11"
