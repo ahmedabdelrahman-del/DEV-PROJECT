@@ -16,7 +16,7 @@ spec:
         - name: auth-service
           image: docker.io/ahmed3sjsu/auth-service:initial
           ports:
-            - containerPort: 8080
+            - containerPort: 8081
           env:
             - name: USER_SERVICE_URL
               value: http://user-service

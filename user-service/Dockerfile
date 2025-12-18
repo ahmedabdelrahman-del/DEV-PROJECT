@@ -9,5 +9,5 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /out/app /app
 USER nonroot:nonroot
-EXPOSE 8080
+EXPOSE 8081
 ENTRYPOINT ["/app"]

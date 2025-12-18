@@ -16,7 +16,7 @@ spec:
         - name: user-service
           image: docker.io/ahmed3sjsu/user-service:initial
           ports:
-            - containerPort: 8080
+            - containerPort: 8081
           env:
             - name: DATABASE_URL
               value: postgresql://appuser:apppass@postgres-postgresql:5432/appdb?sslmode=disable
