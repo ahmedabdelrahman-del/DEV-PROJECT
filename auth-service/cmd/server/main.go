@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	addr := ":8081"
+	addr := ":8082"
 	if v := os.Getenv("ADDR"); v != "" {
 		addr = v
 	}
