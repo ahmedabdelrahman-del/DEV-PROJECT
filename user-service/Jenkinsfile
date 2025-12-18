@@ -70,33 +70,34 @@ pipeline {
       }
     }
 
-    stage('Update GitOps (dev)') {
-      steps {
-        sshagent(credentials: ['github-ssh']) {
-          sh '''
-            set -euo pipefail
-            rm -rf gitops
-            git clone -b "${GITOPS_BRANCH}" "${GITOPS_REPO_SSH}" gitops
-            cd gitops
+stage('Update GitOps (dev)') {
+  steps {
+    sshagent(credentials: ['gitops-repo-ssh']) {
+      sh '''
+        set -euo pipefail
+        rm -rf gitops
+        git clone -b "${GITOPS_BRANCH}" "${GITOPS_REPO_SSH}" gitops
+        cd gitops
 
-            if command -v yq >/dev/null 2>&1; then
-              # Prefer YAML-aware updates when available.
-              yq -i '.images[].newTag = strenv(TAG)' "${GITOPS_PATH}"
-            else
-              # Fallback (best-effort): replace the first newTag entry.
-              sed -i.bak '0,/newTag:/s/newTag: .*/newTag: "'"${TAG}"'"/' "${GITOPS_PATH}"
-            fi
+        if command -v yq >/dev/null 2>&1; then
+          # Prefer YAML-aware updates when available.
+          yq -i '.images[].newTag = strenv(TAG)' "${GITOPS_PATH}"
+        else
+          # Fallback (best-effort): replace the first newTag entry.
+          sed -i.bak '0,/newTag:/s/newTag: .*/newTag: "'"${TAG}"'"/' "${GITOPS_PATH}"
+        fi
 
-            git config user.email "jenkins@local"
-            git config user.name  "jenkins"
+        git config user.email "jenkins@local"
+        git config user.name  "jenkins"
 
-            git add "${GITOPS_PATH}"
-            git commit -m "${SERVICE_NAME}: bump image tag to ${TAG}" || true
-            git push origin "${GITOPS_BRANCH}"
-          '''
-        }
-      }
+        git add "${GITOPS_PATH}"
+        git commit -m "${SERVICE_NAME}: bump image tag to ${TAG}" || true
+        git push origin "${GITOPS_BRANCH}"
+      '''
     }
+  }
+}
+
   }
 
   post {
