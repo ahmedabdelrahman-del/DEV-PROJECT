@@ -122,7 +122,7 @@ echo "[e2e] create user"
 CREATE_STATUS=$(curl -s -o /tmp/create.json -w "%{http_code}" -H 'Content-Type: application/json' \
   -d '{"username":"ci-user","password":"ci-pass-123"}' http://localhost:8081/users)
 cat /tmp/create.json
-[[ "$CREATE_STATUS" == "200" ]] || { echo "create user failed: $CREATE_STATUS"; exit 1; }
+[[ "$CREATE_STATUS" == "201" ]] || { echo "create user failed: $CREATE_STATUS"; exit 1; }
 
 echo "[e2e] login"
 LOGIN_STATUS=$(curl -s -o /tmp/login.json -w "%{http_code}" -H 'Content-Type: application/json' \
