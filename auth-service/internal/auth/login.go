@@ -1,14 +1,13 @@
 package auth
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 var ErrInvalidCredentials = errors.New("invalid credentials")
@@ -18,43 +17,30 @@ type UserServiceClient struct {
 	Client  *http.Client
 }
 
-func (c UserServiceClient) GetPasswordHash(username string) (string, error) {
-	u, err := url.JoinPath(c.BaseURL, "/internal/users/"+username)
+func (c UserServiceClient) VerifyCredentials(username, password string) error {
+	u, err := url.JoinPath(c.BaseURL, "/internal/users/"+url.PathEscape(username)+"/verify")
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, u, nil)
+	body, _ := json.Marshal(map[string]string{"password": password})
+	req, _ := http.NewRequest(http.MethodPost, u, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrInvalidCredentials
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK {
+		return nil
 	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("user-service status: %d", resp.StatusCode)
-	}
-
-	var out struct {
-		PasswordHash string `json:"password_hash"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
-	}
-	if out.PasswordHash == "" {
-		return "", fmt.Errorf("empty hash from user-service")
-	}
-	return out.PasswordHash, nil
-}
-
-func VerifyPassword(hash, password string) error {
-	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
+	// Treat both "not found" and "unauthorized" the same to avoid enumeration.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusNotFound {
 		return ErrInvalidCredentials
 	}
-	return nil
+	return fmt.Errorf("user-service status: %d", resp.StatusCode)
 }
 
 func DefaultHTTPClient() *http.Client {
