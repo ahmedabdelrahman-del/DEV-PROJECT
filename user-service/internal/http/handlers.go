@@ -3,14 +3,15 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
+
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"user-service/internal/users"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type Handlers struct {
