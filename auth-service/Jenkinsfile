@@ -98,6 +98,98 @@ pipeline {
   }
 }
 
+    stage('E2E (kind smoke)') {
+      steps {
+        sh '''
+          set -euo pipefail
+
+          # Install prerequisites if missing
+          if ! command -v kind >/dev/null 2>&1; then
+            curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+            chmod +x ./kind
+            sudo mv ./kind /usr/local/bin/
+          fi
+
+          if ! command -v kubectl >/dev/null 2>&1; then
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+
+          if ! command -v helm >/dev/null 2>&1; then
+            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          fi
+
+          # Create disposable cluster
+          kind delete cluster --name dev || true
+          kind create cluster --name dev --config kind-config.yaml
+          kubectl wait --for=condition=Ready node --all --timeout=300s
+
+          # Storage class
+          kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+          kubectl patch storageclass local-path -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
+          # Ingress
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=180s
+
+          # Postgres
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm upgrade --install postgres bitnami/postgresql -f gitops/infra/postgres/values-dev.yaml
+          kubectl wait --for=condition=ready pod --selector=app.kubernetes.io/name=postgresql --timeout=300s
+
+          for i in {1..60}; do
+            if kubectl exec -it deployment/postgres-postgresql -- pg_isready -U appuser -d appdb &>/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+          # Build & load local images for smoke
+          export DOCKER_BUILDKIT=1
+          docker build -t user-service:dev ./user-service
+          docker build -t auth-service:dev ./auth-service
+          kind load docker-image user-service:dev --name dev
+          kind load docker-image auth-service:dev --name dev
+
+          # Deploy manifests (dev overlays point to :dev images)
+          kubectl apply -k gitops/apps/user-service/overlays/dev
+          kubectl apply -k gitops/apps/auth-service/overlays/dev
+          kubectl apply -k gitops/apps/api-ingress/overlays/dev
+
+          kubectl rollout status deployment/user-service --timeout=180s
+          kubectl rollout status deployment/auth-service --timeout=180s
+
+          # E2E smoke: create user then login
+          create_status=$(curl -s -o /tmp/create.json -w "%{http_code}" --resolve api.local:80:127.0.0.1 -H "Content-Type: application/json" -d '{"username":"ci-user","password":"ci-pass-123"}' http://api.local/api/v1/users)
+          if [ "$create_status" != "200" ]; then
+            echo "Create user failed with status $create_status"
+            cat /tmp/create.json || true
+            exit 1
+          fi
+
+          login_status=$(curl -s -o /tmp/login.json -w "%{http_code}" --resolve api.local:80:127.0.0.1 -H "Content-Type: application/json" -d '{"username":"ci-user","password":"ci-pass-123"}' http://api.local/api/v1/login)
+          if [ "$login_status" != "200" ]; then
+            echo "Login failed with status $login_status"
+            cat /tmp/login.json || true
+            exit 1
+          fi
+
+          if ! grep -q token /tmp/login.json; then
+            echo "Token not present in login response"
+            cat /tmp/login.json || true
+            exit 1
+          fi
+        '''
+      }
+      post {
+        always {
+          sh 'kind delete cluster --name dev || true'
+        }
+      }
+    }
+
   }
 
   post {
