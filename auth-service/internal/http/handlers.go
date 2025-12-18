@@ -33,12 +33,7 @@ func (h Handlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, err := h.UserClient.GetPasswordHash(req.Username)
-	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
-		return
-	}
-	if err := auth.VerifyPassword(hash, req.Password); err != nil {
+	if err := h.UserClient.VerifyCredentials(req.Username, req.Password); err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}
