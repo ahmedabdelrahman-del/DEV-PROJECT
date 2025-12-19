@@ -8,4 +8,4 @@ images:
   # Use the locally built image loaded into kind by bootstrap.sh
   - name: docker.io/ahmed3sjsu/user-service
     newName: user-service
-    newTag: "66609aa"
+    newTag: "bfbb303"
